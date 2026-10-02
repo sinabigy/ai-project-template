@@ -1,0 +1,38 @@
+{
+  "project_schema_version": 1,
+  "ai_protocol_version": "1.0.0",
+  "name": "",
+  "objective": "",
+  "instance": {
+    "state": "template",
+    "origin": null,
+    "initialized_at": null,
+    "template_version": "1.0.0"
+  },
+  "stack": {
+    "languages": [],
+    "package_managers": [],
+    "build_systems": [],
+    "frameworks": [],
+    "detected_by": null
+  },
+  "paths": {
+    "source": [],
+    "tests": [],
+    "docs": [
+      "docs"
+    ]
+  },
+  "validation": {
+    "commands": []
+  },
+  "shims": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md"
+  ],
+  "policies": {
+    "allow_parallel_active": false,
+    "max_shim_lines_warning": 40
+  }
+}

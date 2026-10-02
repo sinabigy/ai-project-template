@@ -1,0 +1,15 @@
+# --- ai-project-template ---
+# Local, non-authoritative runtime data (model registry, sessions, telemetry, credentials)
+.ai/runtime/*
+!.ai/runtime/.gitkeep
+# Generated maps (regenerate with tools/ai-map)
+.ai/map/*.json
+# Secrets: real env files and keys. Example/template env files stay trackable.
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.template
+*.pem
+*.key
+__pycache__/

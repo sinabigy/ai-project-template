@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-project-template.invalid/schemas/project.schema.json",
+  "title": "Project configuration (canonical)",
+  "type": "object",
+  "required": [
+    "project_schema_version",
+    "ai_protocol_version",
+    "name",
+    "objective",
+    "instance",
+    "stack",
+    "paths",
+    "validation",
+    "shims",
+    "policies"
+  ],
+  "properties": {
+    "project_schema_version": {
+      "const": 1
+    },
+    "ai_protocol_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "objective": {
+      "type": "string",
+      "description": "Set by the user. Empty until confirmed; never invented."
+    },
+    "instance": {
+      "type": "object",
+      "required": [
+        "state",
+        "template_version"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "template",
+            "initialized"
+          ]
+        },
+        "origin": {
+          "enum": [
+            "greenfield",
+            "retrofit",
+            null
+          ]
+        },
+        "initialized_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "template_version": {
+          "type": "string"
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "package_managers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "build_systems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "detected_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "docs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "required": [
+        "commands"
+      ],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        }
+      }
+    },
+    "shims": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?![/\\\\])(?!.*(^|/)\\.\\.(/|$)).+$",
+        "description": "Repo-relative path; no absolute paths or '..'."
+      },
+      "uniqueItems": true
+    },
+    "policies": {
+      "type": "object",
+      "properties": {
+        "allow_parallel_active": {
+          "type": "boolean"
+        },
+        "max_shim_lines_warning": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "required": [
+        "id",
+        "stage",
+        "cmd",
+        "source",
+        "confirmed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stage": {
+          "enum": [
+            "format",
+            "lint",
+            "typecheck",
+            "unit",
+            "integration",
+            "e2e",
+            "build",
+            "other"
+          ]
+        },
+        "cmd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provenance, e.g. package.json, pyproject.toml, Makefile, conventional-default, user."
+        },
+        "confirmed": {
+          "type": "boolean",
+          "description": "Only confirmed commands are canonical validation."
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
