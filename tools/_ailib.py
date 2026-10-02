@@ -16,9 +16,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-TEMPLATE_VERSION = "1.0.0"
+TEMPLATE_VERSION = "1.0.1"
 AI_PROTOCOL_VERSION = "1.0.0"
-MAPPER_VERSION = "1.0.0"
+MAPPER_VERSION = "1.0.1"
 
 TASK_STATUSES = ("queue", "active", "blocked", "completed")
 TASK_ID_RE = re.compile(r"^T-\d{4,}$")

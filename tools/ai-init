@@ -27,6 +27,8 @@ import _ailib as L  # noqa: E402
 
 README_MARKER = "<!-- ai-project-template:readme -->"
 PROTOCOL_OWNED = ("AI_PROTOCOL.md", "docs/protocol/", "tools/", ".ai/schemas/", ".ai/templates/")
+TEMPLATE_ONLY = ("tools/tests/",)  # self-tests of the pristine template; never copied into projects
+STRUCTURE_DOCS = (".ai/context/summaries/README.md",)  # explains an otherwise-empty project folder
 NEVER_COPY = (".ai/runtime/", ".ai/map/", ".ai/tasks/", ".ai/context/summaries/", ".ai/config/project.json",
               ".ai/state/")
 SHIM_SNIPPET = ("This repository uses a portable AI protocol. Read, in order:\n"
@@ -50,9 +52,12 @@ def _template_files(src: Path) -> list[str]:
         if not p.is_file() or "__pycache__" in p.parts or ".git" in p.relative_to(src).parts[:1]:
             continue
         rel = p.relative_to(src).as_posix()
-        keep_gitkeep = p.name == ".gitkeep"
+        if rel.startswith(TEMPLATE_ONLY):
+            continue
+        # structure markers ship everywhere; project data (tasks, results, maps, runtime) never does
+        keep_marker = p.name == ".gitkeep" or rel in STRUCTURE_DOCS
         if rel in ("AGENTS.md", "CLAUDE.md", "GEMINI.md") or rel.startswith(PROTOCOL_OWNED) \
-                or (rel.startswith(".ai/") and (keep_gitkeep or not rel.startswith(NEVER_COPY))):
+                or (rel.startswith(".ai/") and (keep_marker or not rel.startswith(NEVER_COPY))):
             out.append(rel)
     return out
 

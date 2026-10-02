@@ -116,7 +116,7 @@
     "exclude": [
       "tools/_ailib.py",
       "tools/ai-*",
-      "tools/tests/test_ai_tools.py",
+      "tools/tests/template_selftest.py",
       "docs/protocol/*"
     ],
     "stale_warning": true

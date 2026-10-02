@@ -1,7 +1,10 @@
 """Tests for the ai-* tools. Standard library only.
 
 Each test works on a fresh copy of the template in a temporary directory, so the template
-itself is never modified. Run: python3 -m unittest discover -s tools/tests
+itself is never modified. Run: python3 -m unittest discover -s tools/tests -p 'template_selftest.py'
+
+These are self-tests of the *pristine template*. The file name deliberately avoids test_*.py / *_test.py
+so a project's own test runner never collects it, and every test skips outside an uninitialized template.
 """
 from __future__ import annotations
 
@@ -20,6 +23,18 @@ sys.path.insert(0, str(TEMPLATE / "tools"))
 import _ailib as L  # noqa: E402
 
 HAS_GIT = shutil.which("git") is not None
+
+
+def _pristine_template() -> bool:
+    try:
+        return L.load_json(TEMPLATE / ".ai/config/project.json")["instance"]["state"] == "template"
+    except (OSError, ValueError, KeyError):
+        return False
+
+
+def setUpModule():
+    if not _pristine_template():
+        raise unittest.SkipTest("template self-tests only run in an uninitialized ai-project-template")
 
 
 def _ignore(dirpath, names):
@@ -93,6 +108,30 @@ class Base(unittest.TestCase):
                     "--accept", "Export endpoint returns CSV", "--validate", "python3 -m unittest",
                     "--class", "feature", *extra)
         return json.loads(r.stdout)["id"]
+
+
+class SelfTestIsolationTests(Base):
+    """Regression (found dogfooding v1.0.0): a project's pytest collected these self-tests."""
+
+    def test_no_tool_file_matches_default_test_patterns(self):
+        for p in (TEMPLATE / "tools").rglob("*.py"):
+            self.assertFalse(p.name.startswith("test") or p.name.endswith("_test.py"),
+                             f"{p} would be collected by a project's pytest/unittest")
+
+    def test_selftests_skip_in_an_initialized_project(self):
+        repo = self.initialized()
+        r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-v", "-s", "tools/tests",
+                            "-p", "template_selftest.py"], cwd=repo.root, capture_output=True, text=True,
+                           timeout=120, env=repo.env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("uninitialized ai-project-template", r.stderr)
+        self.assertIn("OK (skipped=1)", r.stderr)
+
+    def test_default_discovery_finds_nothing_in_a_project(self):
+        repo = self.initialized()
+        r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tools"], cwd=repo.root,
+                           capture_output=True, text=True, timeout=120, env=repo.env)
+        self.assertIn("Ran 0 tests", r.stderr)
 
 
 class TemplateTests(Base):
@@ -543,6 +582,46 @@ class InferenceTests(Base):
         repo.ok("ai-map")
         self.assertIn("acme_builder.api", repo.json(".ai/map/repo.json")["build_systems"])
 
+    def _testpaths_layout(self, repo: Repo, config_file: str, config_text: str) -> None:
+        files = {"src/pkg/app.py": "x = 1\n", "scripts/run_job.py": "x = 1\n",
+                 "scripts/phase3b_hypothesis_test.py": "x = 1\n",  # name matches *_test.py; not a test
+                 "tests/test_app.py": "def test_x(): pass\n", "tests/conftest.py": "\n",
+                 config_file: config_text}
+        for rel, text in files.items():
+            (repo.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (repo.root / rel).write_text(text)
+
+    def test_declared_pytest_testpaths_beat_filename_heuristics(self):
+        configs = {
+            "pyproject-list": ("pyproject.toml", '[project]\nname = "x"\n\n[tool.pytest.ini_options]\n'
+                               'asyncio_mode = "auto"\ntestpaths = [\n  "tests",\n]\n\n[tool.ruff]\nline-length = 100\n'),
+            "pyproject-string": ("pyproject.toml", '[tool.pytest.ini_options]\ntestpaths = "./tests/"\n'),
+            "pytest.ini": ("pytest.ini", "[pytest]\ntestpaths = tests\n"),
+            "setup.cfg": ("setup.cfg", "[metadata]\nname = x\n\n[tool:pytest]\ntestpaths =\n    tests\n"),
+        }
+        for disable in ("", "tomllib"):
+            for label, (fname, text) in configs.items():
+                with self.subTest(config=label, disable=disable or "none"):
+                    repo = self.copy(name=f"tp-{label}-{disable or 'full'}", disable=disable)
+                    self._testpaths_layout(repo, fname, text)
+                    repo.ok("ai-init", "--name", "TP")
+                    m = repo.json(".ai/map/repo.json")
+                    self.assertEqual(m["test_config"]["testpaths"], ["tests"])
+                    self.assertTrue(m["test_config"]["source"].endswith("testpaths"))
+                    self.assertEqual(m["test_paths"], ["tests"])
+                    paths = repo.json(".ai/config/project.json")["paths"]
+                    self.assertEqual(paths["tests"], ["tests"])
+                    self.assertIn("scripts", paths["source"])
+
+    def test_pytest_config_without_testpaths_falls_back_to_heuristics(self):
+        repo = self.copy()
+        self._testpaths_layout(repo, "pyproject.toml", '[tool.pytest.ini_options]\nasyncio_mode = "auto"\n')
+        repo.ok("ai-map")
+        m = repo.json(".ai/map/repo.json")
+        self.assertIsNone(m["test_config"]["testpaths"])
+        self.assertIn("no testpaths declared", m["test_config"]["source"])
+        self.assertIn("scripts", m["test_paths"], "heuristic fallback is unchanged (documented limitation)")
+
     def test_pyproject_without_build_system_infers_nothing(self):
         repo = self.copy()
         (repo.root / "pyproject.toml").write_text('[project]\nname = "x"\n[tool.other]\nbuild-backend = "nope"\n')
@@ -591,6 +670,22 @@ class RetrofitTests(Base):
         Repo(ex).ok("ai-init", "--target", str(ex), tools_root=tpl.root)
         self.assertEqual(before, sha(ex / ".ai/config/project.json"))
         self.assertEqual(originals, {p: sha(ex / p) for p in originals})
+
+    def test_retrofit_does_not_copy_template_selftests(self):
+        tpl = self.copy("tpl", git=False)
+        ex = self.make_existing()
+        Repo(ex).ok("ai-init", "--target", str(ex), tools_root=tpl.root)
+        self.assertTrue((ex / "tools/ai-check").is_file())
+        self.assertFalse((ex / "tools/tests").exists(), "template self-tests must not ship into projects")
+
+    def test_retrofit_ships_summaries_readme_but_never_results(self):
+        tpl = self.copy("tpl", git=False)
+        (tpl.root / ".ai/context/summaries/T-0009.result.json").write_text("{}")  # stray project data
+        ex = self.make_existing()
+        Repo(ex).ok("ai-init", "--target", str(ex), tools_root=tpl.root)
+        self.assertTrue((ex / ".ai/context/summaries/README.md").is_file())
+        self.assertFalse((ex / ".ai/context/summaries/T-0009.result.json").exists())
+        self.assertEqual(Repo(ex).check()[0], 0)
 
     def test_retrofit_refuses_initialized_source(self):
         src = self.initialized()

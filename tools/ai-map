@@ -11,6 +11,8 @@ Reads file metadata first and reads content only for manifests (size-capped).
 from __future__ import annotations
 
 import argparse
+import configparser
+import fnmatch
 import json
 import re
 import subprocess
@@ -93,6 +95,74 @@ def build_backend(text: str, tomllib) -> str | None:
     return None
 
 
+def _pyproject_testpaths(text: str, tomllib) -> tuple[bool, list[str] | None]:
+    """(has [tool.pytest.ini_options], testpaths or None)."""
+    if tomllib is not None:
+        try:
+            ini = tomllib.loads(text).get("tool", {}).get("pytest", {}).get("ini_options")
+        except Exception:
+            return False, None
+        if not isinstance(ini, dict):
+            return False, None
+        tp = ini.get("testpaths")
+        return True, ([tp] if isinstance(tp, str) else [str(x) for x in tp] if isinstance(tp, list) else None)
+    body, inside, found = [], False, False  # without tomllib: scan only the [tool.pytest.ini_options] table
+    for line in text.splitlines():
+        if re.match(r"^\s*\[\[?[^\[\]]+\]\]?\s*$", line):  # a table or array-of-tables header
+            inside = line.strip() == "[tool.pytest.ini_options]"
+            found = found or inside
+            continue
+        if inside:
+            body.append(line)
+    if not found:
+        return False, None
+    m = re.search(r"^\s*testpaths\s*=\s*(\[.*?\]|\"[^\"]*\"|'[^']*')", "\n".join(body), re.M | re.S)
+    return True, (re.findall(r"[\"']([^\"']+)[\"']", m.group(1)) if m else None)
+
+
+def pytest_testpaths(root: Path, top_level: set[str], tomllib, cap: int) -> tuple[list[str] | None, str | None]:
+    """Declared pytest testpaths, from the config file pytest itself would pick (pytest.ini, then
+    pyproject.toml, tox.ini, setup.cfg). Returns (paths or None, provenance or None). Read, never run."""
+    for name in ("pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"):
+        if name not in top_level:
+            continue
+        text = read_capped(root, name, cap)
+        if text is None:
+            continue
+        if name == "pyproject.toml":
+            has, raw = _pyproject_testpaths(text, tomllib)
+            if not has:
+                continue
+            where = "pyproject.toml [tool.pytest.ini_options]"
+        else:
+            cp = configparser.ConfigParser(interpolation=None)
+            try:
+                cp.read_string(text)
+            except configparser.Error:
+                continue
+            sect = "tool:pytest" if name == "setup.cfg" else "pytest"
+            if not cp.has_section(sect):
+                continue
+            value = cp.get(sect, "testpaths", fallback=None)
+            raw = value.split() if value else None
+            where = f"{name} [{sect}]"
+        if not raw:
+            return None, f"{where} (no testpaths declared)"
+        paths = []
+        for tp in raw:
+            tp = tp.strip().rstrip("/")
+            tp = tp[2:] if tp.startswith("./") else tp
+            if tp and tp not in paths:
+                paths.append(tp)
+        return paths, f"{where} testpaths"
+    return None, None
+
+
+def _under(rel: str, testpaths: list[str]) -> bool:
+    return any(rel == tp or rel.startswith(tp + "/") or fnmatch.fnmatch(rel, tp) or fnmatch.fnmatch(rel, tp + "/*")
+               for tp in testpaths)
+
+
 def build_system_name(backend: str) -> str:
     for prefix, name in BUILD_BACKENDS.items():
         if backend == prefix or backend.startswith(prefix + "."):
@@ -115,6 +185,8 @@ def build(root: Path) -> dict:
     binary = 0
     manifests, entry_points, test_dirs = [], [], set()
     pms, builds = set(), set()
+    top_level = {rel for rel, _, _ in files if "/" not in rel}
+    testpaths, test_cfg_source = pytest_testpaths(root, top_level, tomllib, cap)
     for rel, size, _ in files:
         parts = rel.split("/")
         name = parts[-1]
@@ -122,7 +194,10 @@ def build(root: Path) -> dict:
         if ext in L.BINARY_EXT:
             binary += 1
             continue
-        is_test = bool(TEST_FILE.search(name)) or any(p in TEST_DIRS for p in parts[:-1])
+        if testpaths is not None and ext == ".py":
+            is_test = _under(rel, testpaths)  # declared pytest config beats filename heuristics
+        else:
+            is_test = bool(TEST_FILE.search(name)) or any(p in TEST_DIRS for p in parts[:-1])
         if ext in LANG:
             langs[LANG[ext]] += 1
             top = parts[0] if len(parts) > 1 else "."
@@ -142,7 +217,9 @@ def build(root: Path) -> dict:
             pms.add(LOCKFILES[name])
         if name in ENTRY_NAMES and len(parts) <= 4 and len(entry_points) < 30:
             entry_points.append(rel)
-        if is_test:
+        if is_test and testpaths is not None and ext == ".py":
+            test_dirs.add(next(tp for tp in testpaths if _under(rel, [tp])))
+        elif is_test:
             idx = next((i for i, p in enumerate(parts[:-1]) if p in TEST_DIRS), None)
             test_dirs.add("/".join(parts[: idx + 1]) if idx is not None else "/".join(parts[:-1]) or ".")
 
@@ -231,6 +308,7 @@ def build(root: Path) -> dict:
         "manifests": manifests[:50],
         "package_managers": sorted(pms), "build_systems": sorted(builds), "build_backends": backends,
         "entry_points": entry_points, "test_paths": sorted(test_dirs)[:20],
+        "test_config": {"testpaths": testpaths, "source": test_cfg_source},
         "validation_candidates": candidates,
     }
     return {"repo": repo, "deps": {"meta": meta, "manifests": deps}, "files": files, "unavailable": unavailable}

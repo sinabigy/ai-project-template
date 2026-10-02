@@ -42,7 +42,7 @@ Re-running it is safe. This README is replaced by a project README on initializa
 | `tools/ai-task new/start/block/unblock/complete/list/current/show` | Task packets and an enforced state machine |
 | `tools/ai-route T-NNNN` | Capability requirements, plus matching workers from the local registry |
 
-Run the template's own tests with `python3 -m unittest discover -s tools/tests`.
+Run the template's self-tests with `python3 -m unittest discover -s tools/tests -p 'template_selftest.py'`. They only run in an uninitialized template, and they are deliberately named so that a project's pytest never collects them. Retrofits don't copy them.
 
 ## Layout
 
