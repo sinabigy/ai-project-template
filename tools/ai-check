@@ -264,6 +264,30 @@ def check(root: Path) -> Report:
             except (ValueError, OSError):
                 rep.warn("repository map unreadable: rerun tools/ai-map")
 
+    # ---- architecture state must describe the repository, not an aspiration
+    arch = project.get("architecture") or {}
+    for name, mod in (arch.get("modules") or {}).items():
+        if not isinstance(mod, dict):
+            continue
+        for rel in (mod.get("paths") or []) if mod.get("enabled") else []:
+            try:
+                if not L.safe_path(root, rel).exists():
+                    rep.warn(f"architecture.modules.{name} is enabled but its path is missing: {rel}")
+            except ValueError as e:
+                rep.fail(f"architecture.modules.{name}.paths: {e}")
+        for rel in mod.get("evidence") or []:
+            try:
+                if not L.safe_path(root, rel).exists():
+                    rep.warn(f"architecture.modules.{name}: evidence file is missing: {rel}")
+            except ValueError as e:
+                rep.fail(f"architecture.modules.{name}.evidence: {e}")
+    for rel in arch.get("knowledge") or []:
+        try:
+            if not L.safe_path(root, rel).exists():
+                rep.warn(f"architecture.knowledge entry is missing: {rel}")
+        except ValueError as e:
+            rep.fail(f"architecture.knowledge: {e}")
+
     # ---- instance-level guidance
     if state == "template":
         rep.info("uninitialized template: run `python3 tools/ai-init --name \"Project\"` after copying")

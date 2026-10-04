@@ -1,11 +1,11 @@
 # AI Protocol
 
-ai_protocol_version: 1.0.0. This is the hot path: invariants only. Detailed guidance is in `docs/protocol/`; retrieve it only when a rule below is not enough.
+ai_protocol_version: 1.1.0. This is the hot path: invariants only. Detailed guidance is in `docs/protocol/`; retrieve it only when a rule below is not enough.
 
 The repository owns the project. Workers (any AI model, agent or human) are replaceable. Tools establish facts. Tests establish executable truth. The user defines the objective.
 
 ## 1. Start here
-1. Read this file, `.ai/config/project.json` and `.ai/state/CURRENT_TASK.json` (plus the task file it points to).
+1. Read this file, `.ai/config/project.json` (including its optional `architecture` block: what the system is built from and which modules are enabled) and `.ai/state/CURRENT_TASK.json` (plus the task file it points to).
 2. If there is no current task: `python3 tools/ai-task list`. Work on the highest-value unblocked task, in ROADMAP order.
 3. Retrieve anything else only to resolve a specific, nameable uncertainty.
 
@@ -64,7 +64,7 @@ Discover → retrieve → plan → implement → validate → compact → update
 
 ## 7. Validation
 - Confidence is not validation. Prove the change with external checks: compile, test, typecheck, lint, reproduce. Go from narrowest to broadest.
-- Only `confirmed: true` commands in `project.json` are canonical validation. Inferred commands are unconfirmed evidence until reviewed.
+- Only `confirmed: true` commands in `project.json` are canonical validation. Inferred commands are unconfirmed evidence until reviewed. `python3 tools/ai-validate` runs them and reports pass/fail/skip; a skip is never a pass.
 - Report results faithfully, including failures and anything skipped.
 - `python3 tools/ai-check` must exit 0 before a task is complete.
 

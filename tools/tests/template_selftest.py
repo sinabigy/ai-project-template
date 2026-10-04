@@ -695,5 +695,129 @@ class RetrofitTests(Base):
         self.assertFalse((ex / ".ai").exists())
 
 
+class OsMetadataTests(Base):
+    """Regression (found in 1.0.1 on macOS): Finder's .DS_Store made a fresh copy look like a retrofit."""
+
+    def test_ds_store_does_not_turn_greenfield_into_retrofit(self):
+        repo = self.copy()
+        (repo.root / ".DS_Store").write_bytes(b"\0Bud1")
+        (repo.root / "docs" / ".DS_Store").write_bytes(b"\0Bud1")
+        repo.ok("ai-init", "--name", "Demo")
+        self.assertEqual(repo.json(".ai/config/project.json")["instance"]["origin"], "greenfield")
+
+    def test_listing_excludes_os_metadata(self):
+        repo = self.copy(git=False)
+        (repo.root / "src").mkdir()
+        (repo.root / "src" / "._main.py").write_text("x")
+        (repo.root / "src" / "Thumbs.db").write_text("x")
+        (repo.root / "src" / "main.py").write_text("x")
+        rels = [f[0] for f in L.list_files(repo.root)["files"]]
+        self.assertIn("src/main.py", rels)
+        self.assertFalse([r for r in rels if r.endswith(("Thumbs.db", "._main.py"))], rels)
+
+
+class ArchitectureTests(Base):
+    ARCH = {"origin": {"name": "blueprint", "version": "1.0.0", "source": None, "generated_at": None},
+            "profile": "core", "components": {"frontend": "solidjs", "backend": "rust-axum"},
+            "modules": {"cache": {"enabled": False, "adapter": "redis", "reason": "not justified yet"},
+                        "api": {"enabled": True, "paths": ["backend"], "evidence": ["docs/bench.md"]}},
+            "deployment": {"target": "vps"}, "knowledge": [".ai/knowledge/ARCHITECTURE.md"]}
+
+    def with_arch(self, arch, name="proj"):
+        repo = self.initialized(name=name)
+        proj = repo.json(".ai/config/project.json")
+        proj["architecture"] = arch
+        repo.write_json(".ai/config/project.json", proj)
+        return repo
+
+    def test_valid_architecture_passes_and_missing_paths_warn(self):
+        repo = self.with_arch(self.ARCH)
+        code, out = repo.check()
+        self.assertEqual(code, 0, out)
+        self.assertTrue(any("modules.api is enabled but its path is missing: backend" in w for w in out["warn"]))
+        self.assertTrue(any("evidence file is missing: docs/bench.md" in w for w in out["warn"]))
+        (repo.root / "backend").mkdir()
+        (repo.root / "docs" / "bench.md").write_text("x")
+        self.assertFalse([w for w in repo.check()[1]["warn"] if "architecture" in w])
+
+    def test_disabled_module_paths_are_not_required(self):
+        arch = json.loads(json.dumps(self.ARCH))
+        arch["modules"] = {"cache": {"enabled": False, "paths": ["services/redis"]}}
+        code, out = self.with_arch(arch).check()
+        self.assertEqual(code, 0)
+        self.assertFalse([w for w in out["warn"] if "architecture" in w])
+
+    def test_invalid_architecture_fails(self):
+        for i, bad in enumerate(({"profile": "core"},                                   # components required
+                    {"components": {"Frontend": "solid"}},                 # bad role name
+                    {"components": {}, "modules": {"cache": {"adapter": "redis"}}},  # enabled required
+                    {"components": {}, "knowledge": ["../outside.md"]})):  # path escape
+            code, out = self.with_arch(bad, name=f"p{i}").check()
+            self.assertEqual(code, 1, (bad, out))
+
+
+class ValidateTests(Base):
+    def with_commands(self, cmds):
+        repo = self.initialized()
+        proj = repo.json(".ai/config/project.json")
+        proj["validation"]["commands"] = cmds
+        repo.write_json(".ai/config/project.json", proj)
+        return repo
+
+    @staticmethod
+    def cmd(cid, cmd, confirmed=True, **kw):
+        return dict({"id": cid, "stage": "unit", "cmd": cmd, "source": "user", "confirmed": confirmed}, **kw)
+
+    def report(self, repo, *args):
+        r = repo.run("ai-validate", "--json", *args)
+        return r.returncode, json.loads(r.stdout)
+
+    def test_runs_only_confirmed_commands(self):
+        py = f'"{sys.executable}"'
+        repo = self.with_commands([self.cmd("ok", f"{py} -c 'print(1)'"),
+                                   self.cmd("never", f"{py} -c 'open(\"ran\",\"w\")'", confirmed=False)])
+        code, rep = self.report(repo)
+        self.assertEqual(code, 0, rep)
+        self.assertEqual([r["id"] for r in rep["results"]], ["ai-check", "ok"])
+        self.assertEqual(rep["unconfirmed_not_run"], ["never"])
+        self.assertFalse((repo.root / "ran").exists(), "unconfirmed commands must never run")
+
+    def test_failure_stops_and_is_reported(self):
+        py = f'"{sys.executable}"'
+        repo = self.with_commands([self.cmd("bad", f"{py} -c 'import sys; print(\"boom\"); sys.exit(3)'"),
+                                   self.cmd("after", f"{py} -c 'print(1)'")])
+        code, rep = self.report(repo)
+        self.assertEqual(code, 1)
+        bad = rep["results"][1]
+        self.assertEqual((bad["status"], bad["exit_code"]), ("fail", 3))
+        self.assertIn("boom", bad["tail"])
+        self.assertEqual(rep["not_run"], ["after"])
+        code, rep = self.report(repo, "--keep-going")
+        self.assertEqual([r["status"] for r in rep["results"]], ["pass", "fail", "pass"])
+
+    def test_missing_requirement_is_skip_not_pass(self):
+        repo = self.with_commands([self.cmd("needs", "true", requires=["definitely-not-a-real-tool-xyz"])])
+        code, rep = self.report(repo)
+        self.assertEqual(code, 0)
+        self.assertEqual(rep["results"][1]["status"], "skip")
+        self.assertEqual(self.report(repo, "--strict")[0], 1)
+
+    def test_cwd_and_stage_filter(self):
+        py = f'"{sys.executable}"'
+        repo = self.with_commands([self.cmd("in-sub", f"{py} -c 'import os; assert os.path.basename(os.getcwd())==\"sub\"'",
+                                            cwd="sub"),
+                                   dict(self.cmd("lint", "false"), stage="lint")])
+        (repo.root / "sub").mkdir()
+        code, rep = self.report(repo, "--stage", "unit")
+        self.assertEqual(code, 0, rep)
+        self.assertEqual([r["id"] for r in rep["results"]], ["ai-check", "in-sub"])
+
+    def test_report_file_written(self):
+        repo = self.with_commands([self.cmd("ok", "true")])
+        out = repo.root / "reports" / "v.json"
+        repo.ok("ai-validate", "--report", str(out))
+        self.assertTrue(json.loads(out.read_text())["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

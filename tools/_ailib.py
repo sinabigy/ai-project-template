@@ -16,9 +16,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-TEMPLATE_VERSION = "1.0.1"
-AI_PROTOCOL_VERSION = "1.0.0"
-MAPPER_VERSION = "1.0.1"
+TEMPLATE_VERSION = "1.1.0"
+AI_PROTOCOL_VERSION = "1.1.0"
+MAPPER_VERSION = "1.1.0"
 
 TASK_STATUSES = ("queue", "active", "blocked", "completed")
 TASK_ID_RE = re.compile(r"^T-\d{4,}$")
@@ -301,6 +301,8 @@ DEFAULT_EXCLUDE_DIRS = {
     "target", ".next", ".nuxt", ".turbo", ".cache", "coverage", ".gradle", ".idea",
     ".vscode", "vendor", "Pods", ".terraform", ".parcel-cache", "bower_components",
 }
+# OS/editor metadata files: never project content (e.g. macOS Finder writes .DS_Store into every folder it opens)
+DEFAULT_EXCLUDE_FILES = {".DS_Store", "Thumbs.db", "desktop.ini", "Icon\r"}
 BINARY_EXT = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".bmp", ".pdf", ".zip", ".gz",
     ".tgz", ".tar", ".7z", ".rar", ".jar", ".class", ".so", ".dylib", ".dll", ".exe",
@@ -342,6 +344,8 @@ def list_files(root: Path, map_cfg: dict | None = None) -> dict:
 
     def wanted(rel: str) -> bool:
         parts = rel.split("/")
+        if parts[-1] in DEFAULT_EXCLUDE_FILES or parts[-1].startswith("._"):
+            return False
         if any(part in DEFAULT_EXCLUDE_DIRS for part in parts[:-1]):
             return False
         if extra_ex and _ignored(rel, extra_ex):

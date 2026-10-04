@@ -1,5 +1,12 @@
 # Template changelog
 
+## 1.1.0 (protocol 1.1.0)
+- **Fix: OS metadata files.** `.DS_Store`, `Thumbs.db`, `desktop.ini` and AppleDouble `._*` files are excluded from listings and ignored by `.gitignore`. On macOS, Finder's `.DS_Store` made a fresh template copy initialize as a *retrofit* (and failed `test_greenfield_init`).
+- **`project.json → architecture` (optional).** Machine-readable architecture state: `profile`, `components` (role → technology), `modules` (name → `{enabled, adapter, paths, reason, evidence}`), `deployment`, `knowledge`, and `origin` provenance for projects generated from a blueprint. `ai-check` validates it and warns when an enabled module's paths, evidence or knowledge entries are missing. Disabled modules are recorded deliberately so workers know an option exists and why it is off.
+- **`tools/ai-validate`.** Runs the confirmed validation commands and reports pass/fail/skip (ADR 0002). Validation commands gain optional `cwd`, `requires` and `timeout_s`.
+- **Knowledge topic folders** are documented (`.ai/knowledge/<topic>/`).
+- Mapper version 1.1.0 (listing behaviour changed).
+
 ## 1.0.1
 Fixes found by dogfooding the first real retrofit:
 - **Self-test isolation.**

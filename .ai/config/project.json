@@ -1,13 +1,13 @@
 {
   "project_schema_version": 1,
-  "ai_protocol_version": "1.0.0",
+  "ai_protocol_version": "1.1.0",
   "name": "",
   "objective": "",
   "instance": {
     "state": "template",
     "origin": null,
     "initialized_at": null,
-    "template_version": "1.0.1"
+    "template_version": "1.1.0"
   },
   "stack": {
     "languages": [],

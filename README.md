@@ -38,6 +38,7 @@ Re-running it is safe. This README is replaced by a project README on initializa
 |---|---|
 | `tools/ai-init` | Initialize a copy or retrofit an existing repo |
 | `tools/ai-check [--strict-runtime] [--json]` | Validate canonical state; exit 1 on failure |
+| `tools/ai-validate [--stage S] [--json] [--report F]` | Run confirmed validation commands; pass/fail/skip report |
 | `tools/ai-map` | Bounded, provenance-stamped repo map → `.ai/map/` (gitignored) |
 | `tools/ai-task new/start/block/unblock/complete/list/current/show` | Task packets and an enforced state machine |
 | `tools/ai-route T-NNNN` | Capability requirements, plus matching workers from the local registry |

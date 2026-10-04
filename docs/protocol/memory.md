@@ -10,6 +10,7 @@ Project memory is **durable, compressed knowledge**. It is not a transcript arch
 | `.ai/knowledge/CONSTRAINTS.md` | Hard constraints and their sources |
 | `.ai/knowledge/CONVENTIONS.md` | Conventions that are not obvious from the code |
 | `.ai/knowledge/ARCHITECTURE.md` | One line per component |
+| `.ai/knowledge/<topic>/` | Optional topic folders (e.g. `performance/`, `providers/`) when a flat file would grow too large. Index them from `ARCHITECTURE.md` or `project.json → architecture.knowledge`. |
 | `.ai/context/summaries/*.result.json` | Per-task handoff packets (history; not loaded by default) |
 | `.ai/state/STATUS.md` | Answers to the eight state questions |
 

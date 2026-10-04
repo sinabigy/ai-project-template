@@ -13,3 +13,6 @@
 *.pem
 *.key
 __pycache__/
+# OS metadata
+.DS_Store
+Thumbs.db
