@@ -20,6 +20,9 @@ python3 tools/ai-init --name "My Project"            # add --objective "..." onl
 
 # Existing repository (copies only protocol files, never overwrites)
 python3 /path/to/ai-project-template/tools/ai-init --target /path/to/repo
+
+# New project from a copy of a protocol-enabled project (a blueprint or a fork)
+python3 tools/ai-init --derive --name "New Project" --origin-name my-blueprint --origin-version 1.0
 ```
 
 `ai-init`:
@@ -31,6 +34,12 @@ python3 /path/to/ai-project-template/tools/ai-init --target /path/to/repo
 - runs `ai-check`.
 
 Re-running it is safe. This README is replaced by a project README on initialization.
+
+`ai-init --derive` starts a new instance from a copy of an initialized project:
+- **Reset:** task history, task summaries and state (they belong to the source).
+- **Kept:** knowledge, decisions, constraints, confirmed validation commands and the
+  architecture block (inherited).
+- **Recorded:** provenance, in `instance.derived_from` and `architecture.origin`.
 
 ## Tools
 

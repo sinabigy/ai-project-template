@@ -134,6 +134,57 @@ class SelfTestIsolationTests(Base):
         self.assertIn("Ran 0 tests", r.stderr)
 
 
+class DeriveTests(Base):
+    """ai-init --derive: a new project instance from a copy of an initialized one (blueprints)."""
+
+    def _source(self) -> Repo:
+        repo = self.initialized()
+        tid = self.new_task(repo)
+        repo.ok("ai-task", "start", tid)
+        project = repo.json(".ai/config/project.json")
+        project["validation"]["commands"].append({"id": "unit", "stage": "unit", "cmd": "python3 -m unittest",
+                                                  "source": "user", "confirmed": True})
+        project["architecture"] = {"components": {"backend": "python"}}
+        (repo.root / ".ai/config/project.json").write_text(json.dumps(project, indent=2) + "\n")
+        (repo.root / ".ai/knowledge/DECISIONS/0009-inherited.md").write_text("# 0009: inherited decision\n")
+        return repo
+
+    def test_derive_resets_instance_and_keeps_inherited_knowledge(self):
+        src = self._source()
+        dst = self.tmp / "derived"
+        shutil.copytree(src.root, dst, ignore=shutil.ignore_patterns(".git"))
+        repo = Repo(dst, None)
+        repo.ok("ai-init", "--derive", "--name", "New App", "--origin-name", "demo-blueprint", "--origin-version", "1.2")
+        project = repo.json(".ai/config/project.json")
+        self.assertEqual(project["name"], "New App")
+        self.assertEqual(project["instance"]["state"], "initialized")
+        self.assertEqual(project["instance"]["origin"], "derived")
+        self.assertEqual(project["instance"]["derived_from"]["name"], "demo-blueprint")
+        self.assertEqual(project["architecture"]["origin"]["version"], "1.2")
+        self.assertEqual(project["architecture"]["origin"]["source"], "Demo")
+        self.assertTrue(any(c["id"] == "unit" and c["confirmed"] for c in project["validation"]["commands"]),
+                        "confirmed validation is inherited")
+        self.assertTrue((dst / ".ai/knowledge/DECISIONS/0009-inherited.md").exists(), "knowledge is inherited")
+        tasks = sorted(p.name for p in (dst / ".ai/tasks").rglob("T-*.json"))
+        self.assertEqual(len(tasks), 1, tasks)
+        self.assertTrue(tasks[0].startswith("T-0001"), "fresh history starts at T-0001 with discovery")
+        self.assertIsNone(repo.json(".ai/state/CURRENT_TASK.json")["task_id"])
+        code, out = repo.check()
+        self.assertEqual(code, 0, out)
+
+    def test_derive_refuses_an_uninitialized_template(self):
+        repo = self.copy()
+        r = repo.run("ai-init", "--derive", "--name", "X")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("initialized project", r.stderr + r.stdout)
+
+    def test_plain_init_on_initialized_repo_still_changes_nothing(self):
+        repo = self.initialized()
+        before = repo.json(".ai/config/project.json")["instance"]
+        repo.ok("ai-init", "--name", "Other")
+        self.assertEqual(repo.json(".ai/config/project.json")["instance"], before)
+
+
 class TemplateTests(Base):
     def test_template_passes_check(self):
         code, out = self.copy().check()
