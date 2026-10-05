@@ -10,6 +10,9 @@
 
   Plain `ai-init` on an initialized repository still changes nothing.
 - Schema: `instance.origin` accepts `derived`; new optional `instance.derived_from`.
+- **Fix: retrofits no longer copy the template's own maintenance ADRs** (0002 onwards). Their
+  numbers clashed with each project's own ADRs. Projects receive only the ADR template (0000)
+  and the adoption record (0001).
 
 ## 1.1.0 (protocol 1.1.0)
 - **Fix: OS metadata files.** `.DS_Store`, `Thumbs.db`, `desktop.ini` and AppleDouble `._*` files are excluded from listings and ignored by `.gitignore`. On macOS, Finder's `.DS_Store` made a fresh template copy initialize as a *retrofit* (and failed `test_greenfield_init`).

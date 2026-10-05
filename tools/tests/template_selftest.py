@@ -134,6 +134,16 @@ class SelfTestIsolationTests(Base):
         self.assertIn("Ran 0 tests", r.stderr)
 
 
+class RetrofitDecisionsTests(Base):
+    def test_retrofit_ships_only_adr_scaffolding_not_template_maintenance_adrs(self):
+        target = self.tmp / "existing"
+        target.mkdir()
+        (target / "main.py").write_text("print('hi')\n")
+        Repo(target).ok("ai-init", "--target", str(target), tools_root=TEMPLATE)
+        adrs = sorted(p.name for p in (target / ".ai/knowledge/DECISIONS").glob("*.md"))
+        self.assertEqual(adrs, ["0000-template.md", "0001-adopt-ai-protocol.md"])
+
+
 class DeriveTests(Base):
     """ai-init --derive: a new project instance from a copy of an initialized one (blueprints)."""
 

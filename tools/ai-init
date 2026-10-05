@@ -36,6 +36,8 @@ README_MARKER = "<!-- ai-project-template:readme -->"
 PROTOCOL_OWNED = ("AI_PROTOCOL.md", "docs/protocol/", "tools/", ".ai/schemas/", ".ai/templates/")
 TEMPLATE_ONLY = ("tools/tests/",)  # self-tests of the pristine template; never copied into projects
 STRUCTURE_DOCS = (".ai/context/summaries/README.md",)  # explains an otherwise-empty project folder
+TEMPLATE_DECISIONS = ".ai/knowledge/DECISIONS/"
+SHIPPED_DECISIONS = (".ai/knowledge/DECISIONS/0000-template.md", ".ai/knowledge/DECISIONS/0001-adopt-ai-protocol.md")
 NEVER_COPY = (".ai/runtime/", ".ai/map/", ".ai/tasks/", ".ai/context/summaries/", ".ai/config/project.json",
               ".ai/state/")
 SHIM_SNIPPET = ("This repository uses a portable AI protocol. Read, in order:\n"
@@ -63,6 +65,10 @@ def _template_files(src: Path) -> list[str]:
             continue
         # structure markers ship everywhere; project data (tasks, results, maps, runtime) never does
         keep_marker = p.name == ".gitkeep" or rel in STRUCTURE_DOCS
+        # The template's own maintenance ADRs are not project knowledge (their numbers would clash
+        # with the project's ADRs); only the ADR template and the adoption record ship.
+        if rel.startswith(TEMPLATE_DECISIONS) and rel not in SHIPPED_DECISIONS:
+            continue
         if rel in ("AGENTS.md", "CLAUDE.md", "GEMINI.md") or rel.startswith(PROTOCOL_OWNED) \
                 or (rel.startswith(".ai/") and (keep_marker or not rel.startswith(NEVER_COPY))):
             out.append(rel)
